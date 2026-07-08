@@ -1,0 +1,146 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>HTML 5 Boilerplate</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 60px; background-color: #f4f4f9; }
+    
+    .reproductor-oculto { display: none; }
+
+    /* Estilos del reproductor */
+    #contenedor-radio {
+      background: white;
+      padding: 30px;
+      border-radius: 20px;
+      display: inline-block;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+    }
+    #info-cancion { font-size: 22px; font-weight: bold; color: #222; margin-bottom: 5px; }
+    #senal-estado { font-size: 14px; color: #666; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 1px; }
+    .reproduciendo { color: #ff5500 !important; font-weight: bold; }
+
+    /* Botones */
+    .btn-audio { 
+      padding: 15px 25px; font-size: 16px; margin: 5px; cursor: pointer; 
+      border: none; border-radius: 25px; background-color: #ddd; color: #333;
+      font-weight: bold; transition: all 0.3s;
+    }
+    .btn-activo { background-color: #ff5500; color: white; box-shadow: 0 4px 15px rgba(255, 85, 0, 0.4); }
+    .btn-audio:disabled { opacity: 0.3; cursor: not-allowed; }
+  </style>
+  </head>
+  <body>
+
+
+
+  <div id="contenedor-radio">
+    <div id="info-cancion">Sintonizando emisora...</div>
+    <div id="senal-estado">Cargando...</div>
+
+    <!-- El iframe inicia apuntando DIRECTAMENTE a la primera canción de la lista para forzar la carga inicial -->
+    <iframe 
+      id="reproductor-sc" 
+      class="reproductor-oculto"
+      allow="autoplay" 
+      src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A314555386&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true">
+    </iframe>
+
+    <button id="btnPlay" class="btn-audio" onclick="reproducirSC()" disabled>▶ Play</button>
+    <button id="btnPause" class="btn-audio" onclick="pausarSC()" disabled>⏸ Pausa</button>
+    <button id="btnNext" class="btn-audio" onclick="siguienteCancion()" disabled>⏭ Siguiente</button>
+  </div>
+
+  <!-- Cargamos la API oficial de SoundCloud -->
+  <script src="https://w.soundcloud.com/player/api.js"></script>
+
+  <script>
+    // LISTA DE TRACKS CORREGIDA (Usa códigos de pista numéricos directos de la API para máxima estabilidad)
+    const emisoraPlaylist = [
+      "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A314555386&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true", // Canción 1
+      "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A212951874&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true", // Canción 2
+      "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A222100771&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true"   // Canción 3
+    ];
+    
+    let indiceActual = 0;
+
+    const iframeElement = document.getElementById('reproductor-sc');
+    const btnPlay = document.getElementById('btnPlay');
+    const btnPause = document.getElementById('btnPause');
+    const btnNext = document.getElementById('btnNext');
+    const infoCancion = document.getElementById('info-cancion');
+    const senalEstado = document.getElementById('senal-estado');
+    
+    const widget = SC.Widget(iframeElement);
+
+        // FUNCIÓN CENTRALIZADA: Lee los metadatos reales y desbloquea la interfaz
+    function leerDatosYActivar(estadoTexto = "Listo") {
+      widget.getCurrentSound(function(sound) {
+        if (sound && sound.title) {
+          infoCancion.innerText = sound.title;
+          senalEstado.innerText = estadoTexto;
+          
+          // Reactivamos los controles para el usuario
+          btnPlay.disabled = false;
+          btnPause.disabled = false;
+          btnNext.disabled = false;
+        }
+      });
+    }
+
+    // 1. Manejo de la CARGA INICIAL (Solo se ejecuta al abrir la página web)
+    widget.bind(SC.Widget.Events.READY, function() {
+      leerDatosYActivar("Listo para iniciar");
+    });
+
+    // 2. Transición automática cuando una pista termina por completo
+    widget.bind(SC.Widget.Events.FINISH, function() {
+      siguienteCancion();
+    });
+
+    // Cambios dinámicos de estilo visual según reproducción real
+    widget.bind(SC.Widget.Events.PLAY, function() {
+      senalEstado.innerText = "En el aire 🌐";
+      senalEstado.classList.add('reproduciendo');
+      btnPlay.classList.add('btn-activo');
+      btnPause.classList.remove('btn-activo');
+    });
+
+    widget.bind(SC.Widget.Events.PAUSE, function() {
+      senalEstado.innerText = "Transmisión en pausa";
+      senalEstado.classList.remove('reproduciendo');
+      btnPause.classList.add('btn-activo');
+      btnPlay.classList.remove('btn-activo');
+    });
+
+    function reproducirSC() { widget.play(); }
+    function pausarSC() { widget.pause(); }
+
+    // 3. CAMBIO DE CANCIÓN CORREGIDO (Usa la función callback oficial de .load)
+    function siguienteCancion() {
+      // Bloqueamos temporalmente los botones mientras el nuevo búfer carga
+      btnPlay.disabled = true;
+      btnPause.disabled = true;
+      btnNext.disabled = true;
+      
+      senalEstado.innerText = "Sintonizando...";
+      infoCancion.innerText = "Cargando pista...";
+
+      indiceActual = (indiceActual + 1) % emisoraPlaylist.length;
+      
+      // Enviamos la URL con las opciones nativas de SoundCloud
+      widget.load(emisoraPlaylist[indiceActual], {
+        auto_play: true, // Fuerza a que empiece a sonar inmediatamente al cargar
+        callback: function() {
+          // TRUCO SOLUCIÓN: Este bloque corre únicamente cuando la nueva canción ya está montada en el iframe
+          setTimeout(function() {
+            leerDatosYActivar("En el aire 🌐");
+          }, 500); // Un pequeño retraso de milisegundos asegura la sincronía del título
+        }
+      });
+    }
+  </script>
+  </body>
+</html>
