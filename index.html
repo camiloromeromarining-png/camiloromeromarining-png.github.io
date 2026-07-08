@@ -1,10 +1,9 @@
 ﻿<!DOCTYPE html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>Prueba Emisora Online</title>
+    <title>Radio Player - SC & YT</title>
   <style>
     body { font-family: Arial, sans-serif; text-align: center; margin-top: 60px; background-color: #f4f4f9; }
     
@@ -34,13 +33,10 @@
   </head>
   <body>
 
-
-
   <div id="contenedor-radio">
     <div id="info-cancion">Sintonizando emisora...</div>
     <div id="senal-estado">Cargando...</div>
 
-    <!-- El iframe inicia apuntando DIRECTAMENTE a la primera canción de la lista para forzar la carga inicial -->
     <iframe 
       id="reproductor-sc" 
       class="reproductor-oculto"
@@ -48,23 +44,30 @@
       src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A314555386&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true">
     </iframe>
 
-    <button id="btnPlay" class="btn-audio" onclick="reproducirSC()" disabled>▶ Play</button>
-    <button id="btnPause" class="btn-audio" onclick="pausarSC()" disabled>⏸ Pausa</button>
+    <div id="reproductor-yt" class="reproductor-oculto"></div>
+
+    <button id="btnPlay" class="btn-audio" onclick="reproducirMix()" disabled>▶ Play</button>
+    <button id="btnPause" class="btn-audio" onclick="pausarMix()" disabled>⏸ Pausa</button>
     <button id="btnNext" class="btn-audio" onclick="siguienteCancion()" disabled>⏭ Siguiente</button>
   </div>
 
-  <!-- Cargamos la API oficial de SoundCloud -->
   <script src="https://w.soundcloud.com/player/api.js"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
 
   <script>
-    // LISTA DE TRACKS CORREGIDA (Usa códigos de pista numéricos directos de la API para máxima estabilidad)
+    // PLAYLIST MIXTA: Mantiene tus URLs completas de SoundCloud intactas y soporta IDs de YouTube
     const emisoraPlaylist = [
-      "https://api.soundcloud.com/tracks/soundcloud%253Atracks%253A314555386", // Canción 1
-      "https://api.soundcloud.com/tracks/soundcloud%253Atracks%253A212951874", // Canción 2
-      "https://api.soundcloud.com/tracks/soundcloud%253Atracks%253A222100771"  // Canción 3
+      { tipo: 'sc', url: "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A314555386&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true" }, // Canción 1 (SC)
+      { tipo: 'yt', url: "kJQP7kiw5Fk" }, // Canción 2 (YouTube ID)
+      { tipo: 'sc', url: "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A212951874&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true" }, // Canción 3 (SC)
+      { tipo: 'yt', url: "9bZkp7q19f0" }, // Canción 4 (YouTube ID)
+      { tipo: 'sc', url: "https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/soundcloud%253Atracks%253A222100771&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true" }  // Canción 5 (SC)
     ];
     
     let indiceActual = 0;
+    let ytPlayer = null;
+    let apiScLista = false;
+    let apiYtLista = false;
 
     const iframeElement = document.getElementById('reproductor-sc');
     const btnPlay = document.getElementById('btnPlay');
@@ -75,33 +78,52 @@
     
     const widget = SC.Widget(iframeElement);
 
-        // FUNCIÓN CENTRALIZADA: Lee los metadatos reales y desbloquea la interfaz
     function leerDatosYActivar(estadoTexto = "Listo") {
       widget.getCurrentSound(function(sound) {
         if (sound && sound.title) {
           infoCancion.innerText = sound.title;
           senalEstado.innerText = estadoTexto;
-          
-          // Reactivamos los controles para el usuario
-          btnPlay.disabled = false;
-          btnPause.disabled = false;
-          btnNext.disabled = false;
+          desbloquearBotones();
         }
       });
     }
 
-    // 1. Manejo de la CARGA INICIAL (Solo se ejecuta al abrir la página web)
+    // --- APIS READY ---
     widget.bind(SC.Widget.Events.READY, function() {
-      leerDatosYActivar("Listo para iniciar");
+      apiScLista = true;
+      verificarSistemas();
     });
 
-    // 2. Transición automática cuando una pista termina por completo
+    function onYouTubeIframeAPIReady() {
+      ytPlayer = new YT.Player('reproductor-yt', {
+        height: '0', width: '0', videoId: '',
+        playerVars: { 'playsinline': 1, 'disablekb': 1 },
+        events: {
+          'onReady': () => {
+            apiYtLista = true;
+            verificarSistemas();
+          },
+          'onStateChange': onYoutubeStateChange
+        }
+      });
+    }
+
+    function verificarSistemas() {
+      if (apiScLista && apiYtLista) {
+        // Inicializa el primer track sin forzar reproducción
+        if (emisoraPlaylist[indiceActual].tipo === 'sc') {
+          leerDatosYActivar("Listo para iniciar");
+        }
+      }
+    }
+
+    // --- MANEJO DE EVENTOS (SOUNDCLOUD) ---
     widget.bind(SC.Widget.Events.FINISH, function() {
-      siguienteCancion();
+      if (emisoraPlaylist[indiceActual].tipo === 'sc') siguienteCancion();
     });
 
-    // Cambios dinámicos de estilo visual según reproducción real
     widget.bind(SC.Widget.Events.PLAY, function() {
+      if (emisoraPlaylist[indiceActual].tipo !== 'sc') return;
       senalEstado.innerText = "En el aire 🌐";
       senalEstado.classList.add('reproduciendo');
       btnPlay.classList.add('btn-activo');
@@ -109,37 +131,90 @@
     });
 
     widget.bind(SC.Widget.Events.PAUSE, function() {
+      if (emisoraPlaylist[indiceActual].tipo !== 'sc') return;
       senalEstado.innerText = "Transmisión en pausa";
       senalEstado.classList.remove('reproduciendo');
       btnPause.classList.add('btn-activo');
       btnPlay.classList.remove('btn-activo');
     });
 
-    function reproducirSC() { widget.play(); }
-    function pausarSC() { widget.pause(); }
+    // --- MANEJO DE EVENTOS (YOUTUBE) ---
+    function onYoutubeStateChange(event) {
+      if (emisoraPlaylist[indiceActual].tipo !== 'yt') return;
 
-    // 3. CAMBIO DE CANCIÓN CORREGIDO (Usa la función callback oficial de .load)
+      if (event.data === YT.PlayerState.PLAYING) {
+        infoCancion.innerText = ytPlayer.getVideoData().title || "Video de YouTube";
+        senalEstado.innerText = "En el aire 🌐";
+        senalEstado.classList.add('reproduciendo');
+        btnPlay.classList.add('btn-activo');
+        btnPause.classList.remove('btn-activo');
+        desbloquearBotones();
+      } 
+      else if (event.data === YT.PlayerState.PAUSED) {
+        senalEstado.innerText = "Transmisión en pausa";
+        senalEstado.classList.remove('reproduciendo');
+        btnPause.classList.add('btn-activo');
+        btnPlay.classList.remove('btn-activo');
+      } 
+      else if (event.data === YT.PlayerState.ENDED) {
+        siguienteCancion();
+      }
+    }
+
+    // --- CONTROLES GLOBALES ---
+    function reproducirMix() {
+      const track = emisoraPlaylist[indiceActual];
+      if (track.tipo === 'sc') widget.play();
+      if (track.tipo === 'yt') ytPlayer.playVideo();
+    }
+
+    function pausarMix() {
+      const track = emisoraPlaylist[indiceActual];
+      if (track.tipo === 'sc') widget.pause();
+      if (track.tipo === 'yt') ytPlayer.pauseVideo();
+    }
+
     function siguienteCancion() {
-      // Bloqueamos temporalmente los botones mientras el nuevo búfer carga
-      btnPlay.disabled = true;
-      btnPause.disabled = true;
-      btnNext.disabled = true;
+      bloquearBotones();
       
       senalEstado.innerText = "Sintonizando...";
       infoCancion.innerText = "Cargando pista...";
 
       indiceActual = (indiceActual + 1) % emisoraPlaylist.length;
-      
-      // Enviamos la URL con las opciones nativas de SoundCloud
-      widget.load(emisoraPlaylist[indiceActual], {
-        auto_play: true, // Fuerza a que empiece a sonar inmediatamente al cargar
-        callback: function() {
-          // TRUCO SOLUCIÓN: Este bloque corre únicamente cuando la nueva canción ya está montada en el iframe
-          setTimeout(function() {
-            leerDatosYActivar("En el aire 🌐");
-          }, 500); // Un pequeño retraso de milisegundos asegura la sincronía del título
+      const proximoTrack = emisoraPlaylist[indiceActual];
+
+      if (proximoTrack.tipo === 'sc') {
+        if(ytPlayer) ytPlayer.pauseVideo(); // Callar YouTube
+
+        // TRUCO EXTRACCIÓN: Como mantienes tu URL original, filtramos la llamada interna para evitar bugs
+        let urlLimpia = proximoTrack.url;
+        const match = proximoTrack.url.match(/url=(.*?)&/);
+        if (match && match[1]) {
+          urlLimpia = decodeURIComponent(match[1]).replace('soundcloud:tracks:', '');
         }
-      });
+
+        widget.load(urlLimpia, {
+          auto_play: true,
+          callback: function() {
+            setTimeout(function() {
+              leerDatosYActivar("En el aire 🌐");
+            }, 600);
+          }
+        });
+      } 
+      else if (proximoTrack.tipo === 'yt') {
+        widget.pause(); // Callar SoundCloud
+        ytPlayer.loadVideoById(proximoTrack.url);
+      }
+    }
+
+    // --- AUXILIARES UI ---
+    function bloquearBotones() {
+      btnPlay.disabled = true; btnPause.disabled = true; btnNext.disabled = true;
+    }
+
+    function desbloquearBotones() {
+      btnPlay.disabled = false; btnPause.disabled = false; btnNext.disabled = false;
     }
   </script>
   </body>
